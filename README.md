@@ -36,54 +36,21 @@ A full-stack personal finance application for tracking expenses, managing catego
 - **Vanilla JavaScript** - Dynamic behavior
 - **CSS** - Custom styling
 
-### DevOps
-- **Docker & Docker Compose** - Containerization
-- **pgAdmin** - Database management GUI
-
 ## Quick Start
 
 ### Prerequisites
-- Docker and Docker Compose installed
 - OR Python 3.11+ and PostgreSQL 15+
 
-### Option 1: Docker (Recommended)
 
-1. **Clone or create the project structure**
-   ```bash
-   mkdir expense-manager
-   cd expense-manager
-   # Copy all files from the artifact into this directory
-   ```
-
-2. **Start all services**
-   ```bash
-   docker-compose up --build
-   ```
-
-3. **Access the application**
-   - App: http://localhost:8000
-     - Email: dhruvildhamsaniya123@gmail.com
-     - Password: dhruvil
-
-4. **Setup pgAdmin (first time)**
-   - Login to pgAdmin
-   - Add New Server:
-     - Name: expense_manager
-     - Host: localhost
-     - Port: 5432
-     - Username: 
-     - Password: 
-     - Database: 
-
-### Option 2: Local Development
+### Local Development
 
 1. **Setup PostgreSQL**
    ```bash
    # Create database
-   createdb expense_db
+   createdb expense_manager
    
    # Run migrations
-   psql expense_db < backend/migrations/init.sql
+   psql expense_manager < backend/migrations/init.sql
    ```
 
 2. **Setup Python environment**
@@ -284,34 +251,6 @@ Run the application and test:
 5. CSV export functionality
 6. Error handling (missing required fields)
 
-## Troubleshooting
-
-### Database Connection Issues
-```bash
-# Check if PostgreSQL is running
-docker-compose ps
-
-# View logs
-docker-compose logs postgres
-
-# Recreate database
-docker-compose down -v
-docker-compose up
-```
-
-### Permission Issues
-```bash
-# Fix upload directory permissions
-chmod 755 uploads/
-```
-
-### Port Already in Use
-```bash
-# Change ports in docker-compose.yml
-ports:
-  - "8001:8000"  # Change 8000 to 8001
-```
-
 ## Environment Variables
 
 Create `.env` file in backend directory:
@@ -319,20 +258,10 @@ Create `.env` file in backend directory:
 DATABASE_URL=postgresql://username:password@localhost:5432/databasename
 SECRET_KEY=your-very-secret-key-minimum-32-characters
 ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
 UPLOAD_FOLDER=uploads/receipts
 MAX_UPLOAD_SIZE=5242880
 ```
-
-## Production Deployment
-
-1. **Change SECRET_KEY** in `.env`
-2. **Use strong database password**
-3. **Enable HTTPS**
-4. **Set up proper firewall rules**
-5. **Configure reverse proxy (Nginx)**
-6. **Set up automated backups**
-7. **Use environment-specific configs**
 
 ## Contributing
 
@@ -346,7 +275,6 @@ MAX_UPLOAD_SIZE=5242880
 ## Support
 
 For issues and questions:
-- Check the troubleshooting section
 - Review application logs in `logs/app.log`
 - Check pgAdmin for database issues
 
