@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Categories - Expense Manager{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 2rem;">Categories</h1>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3>Manage Categories</h3>
+        <button onclick="openAddCategoryModal()" class="btn btn-success">+ Add Category</button>
+    </div>
+    
+    <div id="categoriesGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;"></div>
+</div>
+
+<!-- Add Category Modal -->
+<div id="categoryModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('categoryModal')">&times;</span>
+        <h2>Add Category</h2>
+        
+        <form id="categoryForm">
+            <div class="form-group">
+                <label for="categoryName">Category Name *</label>
+                <input type="text" id="categoryName" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="categoryColor">Color</label>
+                <input type="color" id="categoryColor" value="#3498db">
+            </div>
+            
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="btn btn-success" style="flex: 1;">Save</button>
+                <button type="button" onclick="closeModal('categoryModal')" class="btn" style="flex: 1;">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+async function loadCategories() {
+    try {
+        const response = await fetch('/api/categories');
+        const categories = await response.json();
+        
+        if (response.ok) {
+            displayCategories(categories);
+        } else {
+            showAlert('Failed to load categories', 'error');
+        }
+    } catch (error) {
+        showAlert('An error occurred while loading categories', 'error');
+    }
+}
+
+function displayCategories(categories) {
+    let html = '';
+    
+    if (categories.length === 0) {
+        html = '<p style="text-align: center; color: #666;">No categories yet. Add your first category!</p>';
+    } else {
+        categories.forEach(cat => {
+            html += `
+                <div class="card" style="padding: 1.5rem; border-left: 4px solid ${cat.color || '#3498db'};">
+                    <h4 style="margin-bottom: 0.5rem;">${cat.name}</h4>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                        <button onclick="deleteCategory(${cat.id})" class="btn btn-danger" style="padding: 0.5rem 1rem;">Delete</button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    document.getElementById('categoriesGrid').innerHTML = html;
+}
+
+function openAddCategoryModal() {
+    document.getElementById('categoryForm').reset();
+    document.getElementById('categoryColor').value = '#3498db';
+    openModal('categoryModal');
+}
+
+document.getElementById('categoryForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = {
+        name: document.getElementById('categoryName').value,
+        color: document.getElementById('categoryColor').value
+    };
+    
+    try {
+        const response = await fetch('/api/categories', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(formData)
+        });
+        
+        if (response.ok) {
+            showAlert('Category created successfully', 'success');
+            closeModal('categoryModal');
+            loadCategories();
+        } else {
+            const data = await response.json();
+            showAlert(data.detail || 'Failed to create category', 'error');
+        }
+    } catch (error) {
+        showAlert('An error occurred', 'error');
+    }
+});
+
+async function deleteCategory(id) {
+    if (!confirm('Are you sure? This will set all related expenses to uncategorized.')) return;
+    
+    try {
+        const response = await fetch(`/api/categories/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showAlert('Category deleted successfully', 'success');
+            loadCategories();
+        } else {
+            showAlert('Failed to delete category', 'error');
+        }
+    } catch (error) {
+        showAlert('An error occurred', 'error');
+    }
+}
+
+// Load categories on page load
+loadCategories();
+</script>
+{% endblock %}

@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Expense Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .stat-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin: 0.5rem 0;
+    }
+    
+    .stat-label {
+        opacity: 0.9;
+        font-size: 0.9rem;
+    }
+
+    #expenseChart {
+        max-width: 350px;
+        max-height: 350px;
+        margin: 0 auto;
+    }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 2rem;">Dashboard</h1>
+
+<div class="card">
+    <h3>Filter By Date Range</h3>
+    <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+        <input type="date" id="startDate" class="form-control">
+        <input type="date" id="endDate" class="form-control">
+        <button onclick="loadDashboard()" class="btn btn-primary">Apply</button>
+    </div>
+</div>
+
+<div class="dashboard-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total Expenses</div>
+        <div class="stat-value" id="totalExpenses">$0.00</div>
+    </div>
+    
+    <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+        <div class="stat-label">Number of Transactions</div>
+        <div class="stat-value" id="totalTransactions">0</div>
+    </div>
+    
+    <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+        <div class="stat-label">Top Category</div>
+        <div class="stat-value" id="topCategory" style="font-size: 1.5rem;">-</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Monthly Breakdown by Category</h3>
+    <canvas id="expenseChart"></canvas>
+</div>
+
+<div class="card">
+    <h3>Category Breakdown</h3>
+    <div id="categoryBreakdown"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+let chart;
+
+// Set default dates (current month)
+const today = new Date();
+const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+document.getElementById('startDate').valueAsDate = firstDay;
+document.getElementById('endDate').valueAsDate = lastDay;
+
+async function loadDashboard() {
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    
+    if (!startDate || !endDate) {
+        showAlert('Please select both start and end dates', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/dashboard/monthly?start_date=${startDate}&end_date=${endDate}`);
+        const data = await response.json();
+        
+        if (response.ok) {
+            updateDashboard(data);
+        } else {
+            showAlert(data.detail || 'Failed to load dashboard', 'error');
+        }
+    } catch (error) {
+        showAlert('An error occurred while loading dashboard', 'error');
+    }
+}
+
+function updateDashboard(data) {
+    // Update stats
+    document.getElementById('totalExpenses').textContent = `${data.grand_total.toFixed(2)}`;
+    document.getElementById('totalTransactions').textContent = data.totals.reduce((sum, cat) => {
+        return cat.total > 0 ? sum + 1 : sum;
+    }, 0);
+    
+    if (data.totals.length > 0 && data.totals[0].total > 0) {
+        document.getElementById('topCategory').textContent = data.totals[0].category_name;
+    } else {
+        document.getElementById('topCategory').textContent = '-';
+    }
+    
+    // Update chart
+    const labels = data.totals.map(t => t.category_name);
+    const values = data.totals.map(t => parseFloat(t.total));
+    const colors = generateColors(data.totals.length);
+    
+    if (chart) {
+        chart.destroy();
+    }
+    
+    const ctx = document.getElementById('expenseChart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: values,
+                backgroundColor: colors,
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return `${label}: ${value.toFixed(2)} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // Update category breakdown table
+    let html = '<table><thead><tr><th>Category</th><th>Amount</th><th>Percentage</th></tr></thead><tbody>';
+    
+    data.totals.forEach(cat => {
+        const percentage = ((parseFloat(cat.total) / data.grand_total) * 100).toFixed(1);
+        html += `
+            <tr>
+                <td>${cat.category_name}</td>
+                <td>${parseFloat(cat.total).toFixed(2)}</td>
+                <td>${percentage}%</td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    document.getElementById('categoryBreakdown').innerHTML = html;
+}
+
+function generateColors(count) {
+    const colors = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+        '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+    ];
+    return colors.slice(0, count);
+}
+
+// Load dashboard on page load
+loadDashboard();
+</script>
+{% endblock %}
