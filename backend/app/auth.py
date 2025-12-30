@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Response, Depends, Request, Form
+from fastapi import APIRouter, HTTPException, status, Response, Depends, Request, Form, Body
 from fastapi.responses import RedirectResponse
 from app.models.user import UserRegister, UserLogin, UserResponse
 from app.utils import hash_password, verify_password, create_access_token, get_current_user
@@ -11,47 +11,39 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(user: UserRegister, base_currency: str = Form("INR")):
+async def register(user: UserRegister = Body(...)):
     try:
-        # Check if user exists
+        username = user.username
+        email = user.email
+        password = user.password
+        base_currency = getattr(user, "base_currency", "INR")
+
         existing_user = await db.fetch_one(
             "SELECT id FROM users WHERE username = $1 OR email = $2",
-            user.username, user.email
+            username, email
         )
-        
         if existing_user:
-            logger.warning(f"Registration attempt with existing username/email: {user.username}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username or email already exists"
-            )
-        
-        # Hash password and create user
-        hashed_pw = hash_password(user.password)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username or email already exists")
+
+        hashed_pw = hash_password(password)
         result = await db.fetch_one(
             """
             INSERT INTO users (username, email, password_hash, base_currency)
             VALUES ($1, $2, $3, $4)
             RETURNING id, username, email, base_currency, created_at
             """,
-            user.username, user.email, hashed_pw, base_currency
+            username, email, hashed_pw, base_currency
         )
-        
-        logger.info(f"New user registered: {user.username}")
-        return {
-            "message": "User created successfully",
-            "user": dict(result)
-        }
-    
+
+        logger.info(f"New user registered: {username}")
+        return {"message": "User created successfully", "user": dict(result)}
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Registration error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Registration failed"
-        )
-
+        logger.exception("Registration error")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Registration failed")
+    
 @router.post("/login")
 async def login(user: UserLogin, response: Response):
     try:
