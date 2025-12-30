@@ -63,8 +63,11 @@ async def get_expenses(
         total = await db.fetch_one(count_query, *params)
         
         # Get expenses
+        # FIX: Select both original_currency/amount AND converted_amount
         query = f"""
-            SELECT e.id, e.user_id, e.category_id, e.amount, e.currency,
+            SELECT e.id, e.user_id, e.category_id, 
+                   e.amount, e.currency, 
+                   e.original_currency, e.converted_amount, e.conversion_rate,
                    e.expense_date, e.description, e.receipt_url, 
                    e.created_at, e.updated_at, c.name as category_name
             FROM expenses e

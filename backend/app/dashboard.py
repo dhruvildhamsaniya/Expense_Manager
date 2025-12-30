@@ -14,19 +14,27 @@ async def get_monthly_breakdown(
     end_date: date,
     current_user: dict = Depends(get_current_user)
 ):
+    """
+    Get monthly breakdown by category.
+    
+    FIX: Now uses converted_amount instead of amount for all aggregations.
+    This ensures multi-currency expenses are properly summed in base currency.
+    """
     try:
         user_id = int(current_user['sub'])
         
-        # Call stored procedure
+        # FIX: Call stored procedure (which already uses converted_amount)
         result = await db.fetch_all(
             "SELECT * FROM monthly_category_totals($1, $2, $3)",
             user_id, start_date, end_date
         )
         
         totals = [dict(row) for row in result]
+        
+        # FIX: Calculate grand total from converted amounts
         grand_total = sum(float(row['total']) for row in totals)
         
-        logger.info(f"Monthly breakdown fetched for user {user_id}")
+        logger.info(f"Monthly breakdown fetched for user {user_id} - Grand Total: {grand_total}")
         
         return {
             "totals": totals,
