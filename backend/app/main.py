@@ -4,11 +4,15 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.db import db
 from app import auth, categories, expenses, dashboard
+from app.middleware import SecurityHeadersMiddleware
+from app import recurring_expenses, budgets
+from app.scheduler import start_scheduler, shutdown_scheduler
 from app.utils import get_current_user
 from contextlib import asynccontextmanager
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+
 
 # Setup logging
 os.makedirs("logs", exist_ok=True)
@@ -27,13 +31,17 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup
     await db.connect()
-    logger.info("Application started")
+    start_scheduler()  # NEW: Start background scheduler
+    logger.info("Application started with scheduler")
     yield
     # Shutdown
+    shutdown_scheduler()  # NEW: Shutdown scheduler
     await db.disconnect()
     logger.info("Application shutdown")
 
 app = FastAPI(title="Expense Manager", lifespan=lifespan)
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -46,6 +54,8 @@ app.include_router(auth.router)
 app.include_router(categories.router)
 app.include_router(expenses.router)
 app.include_router(dashboard.router)
+app.include_router(budgets.router)  # NEW
+app.include_router(recurring_expenses.router)  # NEW
 
 # Frontend routes
 @app.get("/", response_class=HTMLResponse)
@@ -91,6 +101,30 @@ async def categories_page(request: Request):
     try:
         user = await get_current_user(request)
         return templates.TemplateResponse("categories.html", {
+            "request": request,
+            "user": user
+        })
+    except:
+        return RedirectResponse(url="/auth/login")
+
+# NEW: Budgets page
+@app.get("/budgets", response_class=HTMLResponse)
+async def budgets_page(request: Request):
+    try:
+        user = await get_current_user(request)
+        return templates.TemplateResponse("budgets.html", {
+            "request": request,
+            "user": user
+        })
+    except:
+        return RedirectResponse(url="/auth/login")
+
+# NEW: Recurring expenses page
+@app.get("/recurring", response_class=HTMLResponse)
+async def recurring_page(request: Request):
+    try:
+        user = await get_current_user(request)
+        return templates.TemplateResponse("recurring.html", {
             "request": request,
             "user": user
         })

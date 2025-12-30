@@ -29,6 +29,90 @@
         opacity: 0.9;
         font-size: 0.9rem;
     }
+    
+    /* NEW: Budget progress bar styles */
+    .budget-item {
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+    }
+    
+    .budget-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+    
+    .budget-name {
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+    
+    .budget-amounts {
+        font-size: 0.9rem;
+        color: #666;
+    }
+    
+    .progress-bar {
+        width: 100%;
+        height: 24px;
+        background-color: #f0f0f0;
+        border-radius: 12px;
+        overflow: hidden;
+        position: relative;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        transition: width 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+    
+    .progress-ok {
+        background-color: #2ecc71;
+    }
+    
+    .progress-warning {
+        background-color: #f39c12;
+    }
+    
+    .progress-danger {
+        background-color: #e74c3c;
+    }
+    
+    .alert-box {
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        border-left: 4px solid;
+    }
+    
+    .alert-warning {
+        background-color: #fff3cd;
+        border-color: #f39c12;
+        color: #856404;
+    }
+    
+    .alert-danger {
+        background-color: #f8d7da;
+        border-color: #e74c3c;
+        color: #721c24;
+    }
+    
+    .recurring-item {
+        padding: 0.75rem;
+        border-left: 3px solid #3498db;
+        background-color: #f8f9fa;
+        margin-bottom: 0.5rem;
+        border-radius: 4px;
+    }
 
     #expenseChart {
         max-width: 350px;
@@ -36,15 +120,29 @@
         margin: 0 auto;
     }
 
+    
+    @media (max-width: 768px) {
+        .dashboard-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        nav ul {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <h1 style="margin-bottom: 2rem;">Dashboard</h1>
 
+<!-- NEW: Budget Alerts Section -->
+<div id="budgetAlerts"></div>
+
 <div class="card">
     <h3>Filter By Date Range</h3>
-    <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+    <div style="display: flex; gap: 1rem; margin-top: 1rem; flex-wrap: wrap;">
         <input type="date" id="startDate" class="form-control">
         <input type="date" id="endDate" class="form-control">
         <button onclick="loadDashboard()" class="btn btn-primary">Apply</button>
@@ -68,6 +166,17 @@
     </div>
 </div>
 
+<!-- NEW: Budget vs Actual Section -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3>Budget Overview</h3>
+        <a href="/budgets" class="btn btn-primary">Manage Budgets</a>
+    </div>
+    <div id="budgetOverview">
+        <p style="color: #666;">No budgets set for this month. <a href="/budgets">Create a budget</a></p>
+    </div>
+</div>
+
 <div class="card">
     <h3>Monthly Breakdown by Category</h3>
     <canvas id="expenseChart"></canvas>
@@ -76,6 +185,17 @@
 <div class="card">
     <h3>Category Breakdown</h3>
     <div id="categoryBreakdown"></div>
+</div>
+
+<!-- NEW: Upcoming Recurring Expenses -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3>Upcoming Recurring Expenses</h3>
+        <a href="/recurring" class="btn btn-primary">Manage Recurring</a>
+    </div>
+    <div id="upcomingRecurring">
+        <p style="color: #666;">No active recurring expenses.</p>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -100,6 +220,7 @@ async function loadDashboard() {
     }
     
     try {
+        // Load regular dashboard data
         const response = await fetch(`/api/dashboard/monthly?start_date=${startDate}&end_date=${endDate}`);
         const data = await response.json();
         
@@ -108,8 +229,120 @@ async function loadDashboard() {
         } else {
             showAlert(data.detail || 'Failed to load dashboard', 'error');
         }
+        
+        // NEW: Load budget data
+        const today = new Date();
+        const month = today.getMonth() + 1;
+        const year = today.getFullYear();
+
+        await loadBudgetData(month, year);
+        
+        // NEW: Load upcoming recurring expenses
+        await loadUpcomingRecurring();
+        
     } catch (error) {
         showAlert('An error occurred while loading dashboard', 'error');
+    }
+}
+
+// NEW: Load budget vs actual data
+async function loadBudgetData(month, year) {
+    try {
+        const response = await fetch(`/api/budgets/vs-actual?month=${month}&year=${year}`);
+        const budgets = await response.json();
+        
+        if (response.ok && budgets.length > 0) {
+            displayBudgets(budgets);
+        } else {
+            document.getElementById('budgetOverview').innerHTML = 
+                '<p style="color: #666;">No budgets set for this month. <a href="/budgets">Create a budget</a></p>';
+        }
+    } catch (error) {
+        console.error('Error loading budget data:', error);
+    }
+}
+
+// NEW: Display budget progress bars
+function displayBudgets(budgets) {
+    let alertsHtml = '';
+    let html = '';
+    
+    budgets.forEach(budget => {
+        const percentage = parseFloat(budget.percentage);
+        const budgetAmount = parseFloat(budget.budget_amount);
+        const actualAmount = parseFloat(budget.actual_amount);
+        const remaining = parseFloat(budget.remaining);
+        
+        // Determine color and alert
+        let progressClass = 'progress-ok';
+        let alertType = null;
+        
+        if (percentage >= 100) {
+            progressClass = 'progress-danger';
+            alertType = 'danger';
+            alertsHtml += `
+                <div class="alert-box alert-danger">
+                    <strong>🚨 Budget Exceeded!</strong> 
+                    ${budget.category_name}: ${actualAmount.toFixed(2)} / ${budgetAmount.toFixed(2)} (${percentage.toFixed(1)}%)
+                </div>
+            `;
+        } else if (percentage >= 80) {
+            progressClass = 'progress-warning';
+            alertType = 'warning';
+            alertsHtml += `
+                <div class="alert-box alert-warning">
+                    <strong>⚠️ Budget Warning!</strong> 
+                    ${budget.category_name}: ${actualAmount.toFixed(2)} / ${budgetAmount.toFixed(2)} (${percentage.toFixed(1)}%)
+                </div>
+            `;
+        }
+        
+        const displayPercentage = Math.min(percentage, 100);
+        
+        html += `
+            <div class="budget-item">
+                <div class="budget-header">
+                    <span class="budget-name">${budget.category_name}</span>
+                    <span class="budget-amounts">${actualAmount.toFixed(2)} / ${budgetAmount.toFixed(2)}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill ${progressClass}" style="width: ${displayPercentage}%">
+                        ${percentage.toFixed(1)}%
+                    </div>
+                </div>
+                <div style="font-size: 0.85rem; color: #666; margin-top: 0.25rem;">
+                    ${remaining >= 0 ? `Remaining: ${remaining.toFixed(2)}` : `Over by: ${Math.abs(remaining).toFixed(2)}`}
+                </div>
+            </div>
+        `;
+    });
+    
+    document.getElementById('budgetAlerts').innerHTML = alertsHtml;
+    document.getElementById('budgetOverview').innerHTML = html;
+}
+
+// NEW: Load upcoming recurring expenses
+async function loadUpcomingRecurring() {
+    try {
+        const response = await fetch('/api/recurring-expenses/upcoming');
+        const recurring = await response.json();
+        
+        if (response.ok && recurring.length > 0) {
+            let html = '';
+            recurring.slice(0, 5).forEach(item => {
+                html += `
+                    <div class="recurring-item">
+                        <strong>${item.description || 'Recurring Expense'}</strong> - 
+                        ${parseFloat(item.amount).toFixed(2)} ${item.currency}
+                        <br>
+                        <small>${item.category_name || 'Uncategorized'} • ${item.frequency}</small>
+                    </div>
+                `;
+            });
+            document.getElementById('upcomingRecurring').innerHTML = html;
+        }
+    } catch (error) {
+        console.error('Error loading recurring expenses:', error);
     }
 }
 

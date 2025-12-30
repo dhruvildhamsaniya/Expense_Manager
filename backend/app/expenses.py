@@ -9,6 +9,9 @@ import logging
 import csv
 import io
 from fastapi.responses import StreamingResponse
+from app.services.ocr_service import ocr_service
+from app.services.currency_service import currency_service
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/expenses", tags=["expenses"])
@@ -127,7 +130,7 @@ async def get_expense(
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_expense(
     amount: Decimal = Form(...),
-    currency: str = Form("USD"),
+    currency: str = Form("INR"),
     expense_date: date = Form(...),
     category_id: Optional[int] = Form(None),
     description: Optional[str] = Form(None),
@@ -144,24 +147,56 @@ async def create_expense(
                 detail="Amount must be >= 0"
             )
         
-        # Handle file upload
+        # Handle file upload and OCR
         receipt_url = None
+        ocr_data = None
+        
         if receipt:
             receipt_url = save_upload_file(receipt, user_id)
+            
+            # Run OCR if enabled
+            if settings.OCR_ENABLED:
+                try:
+                    ocr_data = ocr_service.extract_receipt_data(receipt_url)
+                    logger.info(f"OCR extraction: {ocr_data}")
+                except Exception as e:
+                    logger.error(f"OCR failed: {e}")
+        
+        # Get user's base currency for conversion
+        user_data = await db.fetch_one(
+            "SELECT base_currency FROM users WHERE id = $1",
+            user_id
+        )
+        base_currency = user_data['base_currency'] if user_data else 'INR'
+        
+        # Convert amount to base currency
+        conversion = await currency_service.convert_amount(
+            float(amount), 
+            currency, 
+            base_currency
+        )
         
         result = await db.fetch_one(
             """
             INSERT INTO expenses (user_id, category_id, amount, currency, 
-                                  expense_date, description, receipt_url)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                                  expense_date, description, receipt_url,
+                                  original_currency, converted_amount, conversion_rate)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING id, user_id, category_id, amount, currency, expense_date,
-                      description, receipt_url, created_at, updated_at
+                      description, receipt_url, original_currency, converted_amount,
+                      conversion_rate, created_at, updated_at
             """,
-            user_id, category_id, amount, currency, expense_date, description, receipt_url
+            user_id, category_id, amount, currency, expense_date, description, receipt_url,
+            currency, conversion['converted_amount'], conversion['rate']
         )
         
         logger.info(f"Expense created: {result['id']} by user {user_id}")
-        return dict(result)
+        
+        response_data = dict(result)
+        if ocr_data:
+            response_data['ocr_data'] = ocr_data
+        
+        return response_data
     
     except HTTPException:
         raise
@@ -172,11 +207,50 @@ async def create_expense(
             detail="Failed to create expense"
         )
 
+@router.post("/ocr-preview")
+async def ocr_preview(
+    receipt: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Process receipt with OCR without saving the expense.
+    Returns extracted data for preview.
+    """
+    try:
+        user_id = int(current_user['sub'])
+        
+        if not settings.OCR_ENABLED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OCR is not enabled"
+            )
+        
+        # Save file temporarily
+        receipt_url = save_upload_file(receipt, user_id)
+        
+        # Run OCR
+        ocr_data = ocr_service.extract_receipt_data(receipt_url)
+        
+        return {
+            "success": True,
+            "data": ocr_data,
+            "receipt_url": receipt_url
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"OCR preview error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OCR processing failed"
+        )
+
 @router.put("/{expense_id}")
 async def update_expense(
     expense_id: int,
     amount: Decimal = Form(...),
-    currency: str = Form("USD"),
+    currency: str = Form("INR"),
     expense_date: date = Form(...),
     category_id: Optional[int] = Form(None),
     description: Optional[str] = Form(None),

@@ -14,6 +14,10 @@ A full-stack personal finance application for tracking expenses, managing catego
 - ✅ REST API for all CRUD operations
 - ✅ PostgreSQL stored procedure for efficient monthly totals
 - ✅ Backend error logging to file
+- ✅ Budget tracking and alerts
+- ✅ Recurring expenses
+- ✅ Multi-currency support with real-time conversion
+- ✅ Email notifications
 
 ### Additional Features
 - 📁 Receipt uploads (stored locally)
@@ -44,36 +48,136 @@ A full-stack personal finance application for tracking expenses, managing catego
 
 ### Local Development
 
-1. **Setup PostgreSQL**
-   ```bash
-   # Create database
-   createdb expense_manager
-   
-   # Run migrations
-   psql expense_manager < backend/migrations/init.sql
-   ```
+#### Step 1: Install System Dependencies
 
-2. **Setup Python environment**
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
+**Ubuntu/Debian:**
 
-3. **Configure environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your database credentials
-   ```
+sudo apt-get update
+sudo apt-get install -y \\
+    postgresql postgresql-contrib \\
+    tesseract-ocr tesseract-ocr-eng \\
+    libgl1-mesa-glx libglib2.0-0 \\
+    python3.11 python3.11-venv python3-pip
 
-4. **Run the application**
-   ```bash
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
+**macOS:**
 
-5. **Access the application**
-   - Open http://localhost:8000
+brew install postgresql@15 tesseract python@3.11
+brew services start postgresql@15
+
+**Windows:**
+1. Install PostgreSQL: https://www.postgresql.org/download/windows/
+2. Install Tesseract: https://github.com/UB-Mannheim/tesseract/wiki
+3. Install Python: https://www.python.org/downloads/
+
+#### Step 2: Setup PostgreSQL Database
+
+
+# Start PostgreSQL (if not running)
+sudo service postgresql start  # Linux
+brew services start postgresql@15  # macOS
+
+# Create database user
+sudo -u postgres psql
+CREATE USER expense_user WITH PASSWORD 'expense_pass';
+CREATE DATABASE expense_db OWNER expense_user;
+GRANT ALL PRIVILEGES ON DATABASE expense_db TO expense_user;
+
+# Verify connection
+psql -U expense_user -d expense_db -h localhost
+
+#### Step 3: Run Database Migrations
+
+
+# Navigate to project
+cd expense-manager/backend
+
+# Run migrations in order
+psql -U expense_user -d expense_db -h localhost -f migrations/init.sql
+psql -U expense_user -d expense_db -h localhost -f migrations/002_add_enhanced_features.sql
+
+#### Step 4: Setup Python Environment
+
+
+# Create virtual environment
+cd backend
+python3.11 -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate  # Linux/macOS
+.\\venv\\Scripts\\activate  # Windows
+
+# Upgrade pip
+pip install --upgrade pip
+
+# Install dependencies
+pip install -r requirements.txt
+
+#### Step 5: Configure Environment Variables
+
+
+# Copy example file
+cp .env.example .env
+
+# Edit configuration
+nano .env  # or use any text editor
+
+**Required .env settings:**env
+DATABASE_URL=postgresql://expense_user:expense_pass@localhost:5432/expense_db
+SECRET_KEY=your-very-secret-key-change-this-to-random-32-plus-characters
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+UPLOAD_FOLDER=uploads/receipts
+MAX_UPLOAD_SIZE=5242880
+
+# OCR Settings
+TESSERACT_CMD=/usr/bin/tesseract  # Leave empty if in PATH
+OCR_ENABLED=true
+
+# Currency Settings
+EXCHANGE_RATE_API_URL=https://api.exchangerate-api.com/v4/latest
+CACHE_EXCHANGE_RATES_HOURS=24
+
+# Email Settings (optional - for notifications)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your-email@gmail.com
+SMTP_PASSWORD=your-app-specific-password
+SMTP_FROM_EMAIL=your-email@gmail.com
+EMAIL_ENABLED=false  # Set to true when configured
+
+# Budget Thresholds
+BUDGET_WARNING_THRESHOLD=80.0
+BUDGET_ALERT_THRESHOLD=100.0
+
+#### Step 6: Create Required Directories
+
+
+mkdir -p logs uploads/receipts app/static
+
+#### Step 7: Run Application
+
+
+# Make sure virtual environment is activated
+source venv/bin/activate
+
+# Run with uvicorn
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Or for production (no reload)
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+
+#### Step 8: Verify Application
+
+
+# Test health endpoint
+curl http://localhost:8000/
+
+# Check logs
+tail -f logs/app.log
+
+# Open in browser
+open http://localhost:8000  # macOS
+xdg-open http://localhost:8000  # Linux
 
 ## Project Structure
 
@@ -81,37 +185,46 @@ A full-stack personal finance application for tracking expenses, managing catego
 expense-manager/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI app & routes
-│   │   ├── auth.py              # Authentication endpoints
-│   │   ├── expenses.py          # Expense CRUD endpoints
-│   │   ├── categories.py        # Category endpoints
-│   │   ├── dashboard.py         # Dashboard analytics
-│   │   ├── db.py                # Database connection
-│   │   ├── config.py            # Configuration
-│   │   ├── utils.py             # Utility functions
-│   │   ├── models/              # Pydantic models
+│   │   ├── main.py 
+|   |   ├── middleware.py
+│   │   ├── auth.py 
+│   │   ├── expenses.py 
+│   │   ├── categories.py
+│   │   ├── dashboard.py
+│   │   ├── budgets.py (NEW)
+│   │   ├── recurring_expenses.py (NEW)
+│   │   ├── scheduler.py (NEW)
+│   │   ├── db.py
+│   │   ├── config.py 
+│   │   ├── utils.py
+│   │   ├── models/
 │   │   │   ├── user.py
 │   │   │   ├── category.py
-│   │   │   └── expense.py
-│   │   ├── templates/           # Jinja2 HTML templates
-│   │   │   ├── base.html
-│   │   │   ├── index.html
-│   │   │   ├── register.html
-│   │   │   ├── login.html
-│   │   │   ├── dashboard.html
-│   │   │   ├── expenses.html
-│   │   │   └── categories.html
-│   │   └── static/              # Static files (CSS, JS)
-│   ├── logs/                    # Application logs
+│   │   │   ├── expense.py
+│   │   │   ├── budget.py 
+│   │   │   └── recurring_expense.py 
+│   │   ├── services/ 
+│   │   │   ├── ocr_service.py 
+│   │   │   ├── currency_service.py 
+│   │   │   └── email_service.py 
+│   │   └── templates/
+│   │       ├── base.html 
+│   │       ├── index.html
+│   │       ├── register.html
+│   │       ├── login.html
+│   │       ├── dashboard.html 
+│   │       ├── expenses.html 
+│   │       ├── categories.html
+│   │       ├── budgets.html 
+│   │       └── recurring.html 
 │   ├── migrations/
-│   │   └── init.sql             # Database schema
-│   ├── requirements.txt
-│   └── .env.example
-├── uploads/                     # Receipt uploads
+│   │   ├── init.sql
+│   │   └── 002_add_enhanced_features.sql 
+│   ├── requirements.txt 
+│   └── .env.example 
+├── Dockerfile 
 ├── docker-compose.yml
-├── Dockerfile
-├── .gitignore
-└── README.md
+└── README.md 
 ```
 
 ## API Documentation
@@ -120,64 +233,190 @@ Once the app is running, visit:
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 
+
+## Usage Guide
+
+### First Time Setup
+
+1. **Register Account**
+   - Go to http://localhost:8000
+   - Click "Get Started" or "Register"
+   - Fill in username, email, password
+   - Select base currency (e.g., USD, EUR, INR)
+   - Submit
+
+2. **Create Categories**
+   - Navigate to "Categories" page
+   - Click "+ Add Category"
+   - Enter category name (e.g., "Food", "Transport", "Entertainment")
+   - Choose a color
+   - Save
+
+3. **Add First Expense**
+   - Go to "Expenses" page
+   - Click "+ Add Expense"
+   - Fill in amount, date, select category
+   - Optionally upload receipt
+   - If OCR is enabled, extracted data will auto-fill
+   - Save
+
+### Budget Management
+
+1. **Set Monthly Budget**
+   - Go to "Budgets" page
+   - Select month and year
+   - Click "+ Add Budget"
+   - Choose category
+   - Enter budget amount
+   - Save
+
+2. **Monitor Progress**
+   - View dashboard for visual progress bars
+   - Green: < 80% spent
+   - Yellow: 80-99% spent
+   - Red: >= 100% (over budget)
+   - Receive email alerts at thresholds
+
+### Recurring Expenses
+
+1. **Create Recurring**
+   - Go to "Recurring" page
+   - Click "+ Add Recurring Expense"
+   - Fill in details:
+     - Amount and currency
+     - Category
+     - Description (e.g., "Netflix Subscription")
+     - Frequency (monthly/weekly)
+     - Start date
+   - Save
+
+2. **Auto-Generation**
+   - System runs daily at 00:01 AM
+   - Generates expenses when due
+   - Marks as "[Recurring]" in description
+   - View upcoming recurring on dashboard
+
+### Receipt OCR
+
+1. **Upload Receipt**
+   - Create or edit expense
+   - Click "Choose File" for receipt
+   - Upload image (JPG, PNG)
+   - System processes with OCR
+   - Review extracted data:
+     - Amount (highlighted in yellow)
+     - Date (highlighted in yellow)
+     - Currency
+   - Edit if needed
+   - Save
+
+2. **Tips for Better OCR**
+   - Use clear, well-lit images
+   - Ensure receipt is flat (not crumpled)
+   - Capture the full receipt
+   - Avoid shadows and glare
+   - Minimum 800x600 resolution
+
+### Multi-Currency
+
+1. **Set Base Currency**
+   - During registration OR
+   - In user settings (if implemented)
+   - All dashboard totals show in base currency
+
+2. **Add Expense in Different Currency**
+   - Create expense
+   - Select currency (USD, EUR, GBP, INR, etc.)
+   - Enter amount in that currency
+   - System automatically converts to base currency
+   - Both amounts are stored
+   - View original currency in expense list
+
+### Filtering & Search
+
+1. **Filter by Date**
+   - Select start date and end date
+   - Click "Apply Filters"
+   - View expenses in range
+
+2. **Filter by Category**
+   - Select category from dropdown
+   - Click "Apply Filters"
+
+3. **Search Description**
+   - Type keywords in search box
+   - Searches expense descriptions
+   - Click "Apply Filters"
+
+4. **Export to CSV**
+   - Apply desired filters
+   - Click "Export CSV"
+   - Opens/downloads CSV file
+
+### Dashboard Analytics
+
+1. **Monthly View**
+   - Select date range (default: current month)
+   - Click "Apply"
+   - View:
+     - Total expenses
+     - Transaction count
+     - Top category
+     - Pie chart of category distribution
+     - Budget vs actual (if budgets set)
+     - Upcoming recurring expenses
+
+2. **Charts**
+   - Hover over pie chart for details
+   - Click legend to hide/show categories
+   - Responsive on mobile
+
+---
+
+## API Documentation
+
+Once running, visit:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
 ### Key Endpoints
 
 #### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login
-- `POST /api/auth/logout` - Logout
+- \`POST /api/auth/register\` - Register user
+- \`POST /api/auth/login\` - Login
+- \`POST /api/auth/logout\` - Logout
 
 #### Expenses
-- `GET /api/expenses` - List expenses (with filters)
-- `POST /api/expenses` - Create expense
-- `GET /api/expenses/{id}` - Get expense
-- `PUT /api/expenses/{id}` - Update expense
-- `DELETE /api/expenses/{id}` - Delete expense
-- `GET /api/expenses/export/csv` - Export to CSV
+- \`GET /api/expenses\` - List expenses (paginated, filtered)
+- \`POST /api/expenses\` - Create expense
+- \`GET /api/expenses/{id}\` - Get expense
+- \`PUT /api/expenses/{id}\` - Update expense
+- \`DELETE /api/expenses/{id}\` - Delete expense
+- \`GET /api/expenses/export/csv\` - Export CSV
+- \`POST /api/expenses/ocr-preview\` - Preview OCR extraction
 
 #### Categories
-- `GET /api/categories` - List categories
-- `POST /api/categories` - Create category
-- `DELETE /api/categories/{id}` - Delete category
+- \`GET /api/categories\` - List categories
+- \`POST /api/categories\` - Create category
+- \`DELETE /api/categories/{id}\` - Delete category
+
+#### Budgets
+- \`GET /api/budgets\` - List budgets for month/year
+- \`GET /api/budgets/vs-actual\` - Budget vs actual comparison
+- \`POST /api/budgets\` - Create/update budget
+- \`DELETE /api/budgets/{id}\` - Delete budget
+
+#### Recurring Expenses
+- \`GET /api/recurring-expenses\` - List recurring
+- \`GET /api/recurring-expenses/upcoming\` - Upcoming recurring
+- \`POST /api/recurring-expenses\` - Create recurring
+- \`PUT /api/recurring-expenses/{id}\` - Update recurring
+- \`DELETE /api/recurring-expenses/{id}\` - Deactivate recurring
 
 #### Dashboard
-- `GET /api/dashboard/monthly` - Monthly breakdown (uses stored procedure)
+- \`GET /api/dashboard/monthly\` - Monthly breakdown
 
-## Database Schema
 
-### Users Table
-```sql
-- id (SERIAL PRIMARY KEY)
-- username (VARCHAR UNIQUE)
-- email (VARCHAR UNIQUE)
-- password_hash (VARCHAR)
-- created_at, updated_at (TIMESTAMP)
-```
-
-### Categories Table
-```sql
-- id (SERIAL PRIMARY KEY)
-- user_id (FOREIGN KEY)
-- name (VARCHAR)
-- color (VARCHAR - hex color)
-- created_at (TIMESTAMP)
-```
-
-### Expenses Table
-```sql
-- id (SERIAL PRIMARY KEY)
-- user_id (FOREIGN KEY)
-- category_id (FOREIGN KEY, nullable)
-- amount (NUMERIC)
-- currency (VARCHAR)
-- expense_date (DATE)
-- description (TEXT)
-- receipt_url (TEXT)
-- created_at, updated_at (TIMESTAMP)
-```
-
-### Stored Procedure
-`monthly_category_totals(user_id, start_date, end_date)` - Returns category totals for a date range
 
 ## Security Features
 
@@ -188,80 +427,6 @@ Once the app is running, visit:
 - ✅ Input validation with Pydantic
 - ✅ File upload restrictions
 - ✅ CORS protection
-
-## Usage Guide
-
-### 1. Register an Account
-- Navigate to http://localhost:8000
-- Click "Get Started" or "Register"
-- Fill in username, email, and password
-- Submit the form
-
-### 2. Add Categories
-- Go to "Categories" page
-- Click "+ Add Category"
-- Enter category name and choose a color
-- Save
-
-### 3. Add Expenses
-- Go to "Expenses" page
-- Click "+ Add Expense"
-- Fill in:
-  - Amount
-  - Currency
-  - Date
-  - Category (optional)
-  - Description (optional)
-  - Receipt image (optional)
-- Save
-
-### 4. View Dashboard
-- Go to "Dashboard" page
-- Select date range
-- View:
-  - Total expenses
-  - Number of transactions
-  - Top spending category
-  - Interactive pie chart
-  - Category breakdown table
-
-### 5. Filter and Search
-- On Expenses page:
-  - Filter by date range
-  - Filter by category
-  - Search by description
-  - Export filtered results to CSV
-
-## Logging
-
-Application logs are stored in `logs/app.log` with:
-- INFO: Normal operations
-- WARNING: Suspicious activity
-- ERROR: Exceptions with stack traces
-
-Log rotation: 10MB max file size, 5 backup files
-
-## Testing
-
-Run the application and test:
-1. User registration and login
-2. Adding expenses with required fields
-3. Category CRUD operations
-4. Dashboard monthly totals (verify against database)
-5. CSV export functionality
-6. Error handling (missing required fields)
-
-## Environment Variables
-
-Create `.env` file in backend directory:
-```env
-DATABASE_URL=postgresql://username:password@localhost:5432/databasename
-SECRET_KEY=your-very-secret-key-minimum-32-characters
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
-UPLOAD_FOLDER=uploads/receipts
-MAX_UPLOAD_SIZE=5242880
-```
 
 ## Contributing
 
@@ -280,10 +445,6 @@ For issues and questions:
 
 ## Future Enhancements
 
-- [ ] Budget tracking and alerts
-- [ ] Recurring expenses
-- [ ] Multi-currency support with real-time conversion
-- [ ] Email notifications
 - [ ] Mobile app (React Native)
 - [ ] Data visualization improvements
 - [ ] Expense sharing between users

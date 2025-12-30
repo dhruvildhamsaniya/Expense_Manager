@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Response, Depends, Request
+from fastapi import APIRouter, HTTPException, status, Response, Depends, Request, Form
 from fastapi.responses import RedirectResponse
 from app.models.user import UserRegister, UserLogin, UserResponse
 from app.utils import hash_password, verify_password, create_access_token, get_current_user
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(user: UserRegister):
+async def register(user: UserRegister, base_currency: str = Form("INR")):
     try:
         # Check if user exists
         existing_user = await db.fetch_one(
@@ -30,11 +30,11 @@ async def register(user: UserRegister):
         hashed_pw = hash_password(user.password)
         result = await db.fetch_one(
             """
-            INSERT INTO users (username, email, password_hash)
-            VALUES ($1, $2, $3)
-            RETURNING id, username, email, created_at
+            INSERT INTO users (username, email, password_hash, base_currency)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, username, email, base_currency, created_at
             """,
-            user.username, user.email, hashed_pw
+            user.username, user.email, hashed_pw, base_currency
         )
         
         logger.info(f"New user registered: {user.username}")

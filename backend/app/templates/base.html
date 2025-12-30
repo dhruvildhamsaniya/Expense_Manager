@@ -3,6 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    {% if user %}
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    {% endif %}
+
     <title>{% block title %}Expense Manager{% endblock %}</title>
     <style>
         * {
@@ -218,17 +225,19 @@
 </head>
 <body>
     {% if user %}
-    <nav>
-        <div class="container">
-            <h1>💰 Expense Manager</h1>
-            <ul>
-                <li><a href="/dashboard">Dashboard</a></li>
-                <li><a href="/expenses">Expenses</a></li>
-                <li><a href="/categories">Categories</a></li>
-                <li><a href="/logout">Logout</a></li>
-            </ul>
-        </div>
-    </nav>
+        <nav>
+            <div class="container">
+                <h1>💰 Expense Manager</h1>
+                <ul>
+                    <li><a href="/dashboard">Dashboard</a></li>
+                    <li><a href="/expenses">Expenses</a></li>
+                    <li><a href="/categories">Categories</a></li>
+                    <li><a href="/budgets">Budgets</a></li>  <!-- NEW -->
+                    <li><a href="/recurring">Recurring</a></li>  <!-- NEW -->
+                    <li><a href="/logout">Logout</a></li>
+                </ul>
+            </div>
+        </nav>
     {% endif %}
     
     <div class="container">

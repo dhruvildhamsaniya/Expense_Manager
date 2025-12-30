@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Recurring Expenses - Expense Manager{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 2rem;">Recurring Expenses</h1>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3>Manage Recurring Expenses</h3>
+        <button onclick="openAddRecurringModal()" class="btn btn-success">+ Add Recurring Expense</button>
+    </div>
+    
+    <div id="recurringTable"></div>
+</div>
+
+<!-- Add/Edit Recurring Expense Modal -->
+<div id="recurringModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('recurringModal')">&times;</span>
+        <h2 id="modalTitle">Add Recurring Expense</h2>
+        
+        <form id="recurringForm">
+            <input type="hidden" id="recurringId">
+            
+            <div class="form-group">
+                <label for="amount">Amount *</label>
+                <input type="number" id="amount" step="0.01" min="0" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="currency">Currency</label>
+                <select id="currency">
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                    <option value="INR">INR</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="category">Category</label>
+                <select id="category"></select>
+            </div>
+            
+            <div class="form-group">
+                <label for="description">Description *</label>
+                <input type="text" id="description" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="frequency">Frequency *</label>
+                <select id="frequency" required>
+                    <option value="monthly">Monthly</option>
+                    <option value="weekly">Weekly</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="startDate">Start Date *</label>
+                <input type="date" id="startDate" required>
+            </div>
+            
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="btn btn-success" style="flex: 1;">Save</button>
+                <button type="button" onclick="closeModal('recurringModal')" class="btn" style="flex: 1;">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let categories = [];
+
+async function loadCategories() {
+    try {
+        const response = await fetch('/api/categories');
+        categories = await response.json();
+        
+        const select = document.getElementById('category');
+        select.innerHTML = '<option value="">None</option>';
+        
+        categories.forEach(cat => {
+            select.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
+        });
+    } catch (error) {
+        console.error('Error loading categories:', error);
+    }
+}
+
+async function loadRecurring() {
+    try {
+        const response = await fetch('/api/recurring-expenses');
+        const recurring = await response.json();
+        
+        if (response.ok) {
+            displayRecurring(recurring);
+        } else {
+            showAlert('Failed to load recurring expenses', 'error');
+        }
+    } catch (error) {
+        showAlert('An error occurred while loading recurring expenses', 'error');
+    }
+}
+
+function displayRecurring(recurring) {
+    let html = '<table><thead><tr><th>Description</th><th>Amount</th><th>Frequency</th><th>Start Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+    
+    if (recurring.length === 0) {
+        html += '<tr><td colspan="6" style="text-align: center;">No recurring expenses found</td></tr>';
+    } else {
+        recurring.forEach(item => {
+            const categoryName = categories.find(c => c.id === item.category_id)?.name || 'Uncategorized';
+            const statusBadge = item.is_active 
+                ? '<span style="color: #2ecc71;">●</span> Active'
+                : '<span style="color: #e74c3c;">●</span> Inactive';
+            
+            html += `
+                <tr>
+                    <td>${item.description || '-'}<br><small style="color: #666;">${categoryName}</small></td>
+                    <td>${item.currency} ${parseFloat(item.amount).toFixed(2)}</td>
+                    <td>${item.frequency}</td>
+                    <td>${item.start_date}</td>
+                    <td>${statusBadge}</td>
+                    <td>
+                        <button onclick="editRecurring(${item.id})" class="btn btn-primary" style="padding: 0.5rem 1rem; margin-right: 0.5rem;">Edit</button>
+                        <button onclick="deleteRecurring(${item.id})" class="btn btn-danger" style="padding: 0.5rem 1rem;">Delete</button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+    
+    html += '</tbody></table>';
+    document.getElementById('recurringTable').innerHTML = html;
+}
+
+function openAddRecurringModal() {
+    document.getElementById('modalTitle').textContent = 'Add Recurring Expense';
+    document.getElementById('recurringForm').reset();
+    document.getElementById('recurringId').value = '';
+    document.getElementById('startDate').valueAsDate = new Date();
+    openModal('recurringModal');
+}
+
+async function editRecurring(id) {
+    try {
+        const response = await fetch('/api/recurring-expenses');
+        const recurring = await response.json();
+        const item = recurring.find(r => r.id === id);
+        
+        if (item) {
+            document.getElementById('modalTitle').textContent = 'Edit Recurring Expense';
+            document.getElementById('recurringId').value = item.id;
+            document.getElementById('amount').value = item.amount;
+            document.getElementById('currency').value = item.currency;
+            document.getElementById('category').value = item.category_id || '';
+            document.getElementById('description').value = item.description || '';
+            document.getElementById('frequency').value = item.frequency;
+            document.getElementById('startDate').value = item.start_date;
+            openModal('recurringModal');
+        }
+    } catch (error) {
+        showAlert('Failed to load recurring expense', 'error');
+    }
+}
+
+document.getElementById('recurringForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const recurringId = document.getElementById('recurringId').value;
+    const formData = {
+        category_id: document.getElementById('category').value || null,
+        amount: parseFloat(document.getElementById('amount').value),
+        currency: document.getElementById('currency').value,
+        description: document.getElementById('description').value,
+        frequency: document.getElementById('frequency').value,
+        start_date: document.getElementById('startDate').value
+    };
+    
+    try {
+        const url = recurringId ? `/api/recurring-expenses/${recurringId}` : '/api/recurring-expenses';
+        const method = recurringId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(formData)
+        });
+        
+        if (response.ok) {
+            showAlert(`Recurring expense ${recurringId ? 'updated' : 'created'} successfully`, 'success');
+            closeModal('recurringModal');
+            loadRecurring();
+        } else {
+            const data = await response.json();
+            showAlert(data.detail || 'Operation failed', 'error');
+        }
+    } catch (error) {
+        showAlert('An error occurred', 'error');
+    }
+});
+
+async function deleteRecurring(id) {
+    if (!confirm('Are you sure you want to deactivate this recurring expense?')) return;
+    
+    try {
+        const response = await fetch(`/api/recurring-expenses/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showAlert('Recurring expense deactivated successfully', 'success');
+            loadRecurring();
+        } else {
+            showAlert('Failed to delete recurring expense', 'error');
+        }
+    } catch (error) {
+        showAlert('An error occurred', 'error');
+    }
+}
+
+// Initialize
+loadCategories();
+loadRecurring();
+</script>
+{% endblock %}
