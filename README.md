@@ -46,23 +46,29 @@ A full-stack personal finance application for tracking expenses, managing catego
 - OR Python 3.11+ and PostgreSQL 15+
 
 
-### Local Development
+---
+
+### Local Development Setup
+
+**When to use:** Development, debugging, or if Docker is not available.
 
 #### Step 1: Install System Dependencies
 
 **Ubuntu/Debian:**
-
+\`\`\`bash
 sudo apt-get update
 sudo apt-get install -y \\
     postgresql postgresql-contrib \\
     tesseract-ocr tesseract-ocr-eng \\
     libgl1-mesa-glx libglib2.0-0 \\
     python3.11 python3.11-venv python3-pip
+\`\`\`
 
 **macOS:**
-
+\`\`\`bash
 brew install postgresql@15 tesseract python@3.11
 brew services start postgresql@15
+\`\`\`
 
 **Windows:**
 1. Install PostgreSQL: https://www.postgresql.org/download/windows/
@@ -71,7 +77,7 @@ brew services start postgresql@15
 
 #### Step 2: Setup PostgreSQL Database
 
-
+\`\`\`bash
 # Start PostgreSQL (if not running)
 sudo service postgresql start  # Linux
 brew services start postgresql@15  # macOS
@@ -81,23 +87,30 @@ sudo -u postgres psql
 CREATE USER expense_user WITH PASSWORD 'expense_pass';
 CREATE DATABASE expense_db OWNER expense_user;
 GRANT ALL PRIVILEGES ON DATABASE expense_db TO expense_user;
+\\q
 
 # Verify connection
 psql -U expense_user -d expense_db -h localhost
+\`\`\`
 
 #### Step 3: Run Database Migrations
 
-
+\`\`\`bash
 # Navigate to project
 cd expense-manager/backend
 
 # Run migrations in order
 psql -U expense_user -d expense_db -h localhost -f migrations/init.sql
 psql -U expense_user -d expense_db -h localhost -f migrations/002_add_enhanced_features.sql
+psql -U expense_user -d expense_db -h localhost -f migrations/003_fix_multicurrency.sql
+
+# Verify tables
+psql -U expense_user -d expense_db -h localhost -c "\\dt"
+\`\`\`
 
 #### Step 4: Setup Python Environment
 
-
+\`\`\`bash
 # Create virtual environment
 cd backend
 python3.11 -m venv venv
@@ -111,17 +124,20 @@ pip install --upgrade pip
 
 # Install dependencies
 pip install -r requirements.txt
+\`\`\`
 
 #### Step 5: Configure Environment Variables
 
-
+\`\`\`bash
 # Copy example file
 cp .env.example .env
 
 # Edit configuration
 nano .env  # or use any text editor
+\`\`\`
 
-**Required .env settings:**env
+**Required .env settings:**
+\`\`\`env
 DATABASE_URL=postgresql://expense_user:expense_pass@localhost:5432/expense_db
 SECRET_KEY=your-very-secret-key-change-this-to-random-32-plus-characters
 ALGORITHM=HS256
@@ -148,15 +164,17 @@ EMAIL_ENABLED=false  # Set to true when configured
 # Budget Thresholds
 BUDGET_WARNING_THRESHOLD=80.0
 BUDGET_ALERT_THRESHOLD=100.0
+\`\`\`
 
 #### Step 6: Create Required Directories
 
-
+\`\`\`bash
 mkdir -p logs uploads/receipts app/static
+\`\`\`
 
 #### Step 7: Run Application
 
-
+\`\`\`bash
 # Make sure virtual environment is activated
 source venv/bin/activate
 
@@ -165,10 +183,11 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Or for production (no reload)
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+\`\`\`
 
 #### Step 8: Verify Application
 
-
+\`\`\`bash
 # Test health endpoint
 curl http://localhost:8000/
 
@@ -178,10 +197,12 @@ tail -f logs/app.log
 # Open in browser
 open http://localhost:8000  # macOS
 xdg-open http://localhost:8000  # Linux
+\`\`\`
+
+---
 
 ## Project Structure
 
-```
 expense-manager/
 ├── backend/
 │   ├── app/
@@ -219,13 +240,13 @@ expense-manager/
 │   │       └── recurring.html 
 │   ├── migrations/
 │   │   ├── init.sql
-│   │   └── 002_add_enhanced_features.sql 
+│   │   └── 002_add_enhanced_features.sql
+│   │   └── 003_fix_multicurrency.sql 
 │   ├── requirements.txt 
 │   └── .env.example 
 ├── Dockerfile 
 ├── docker-compose.yml
 └── README.md 
-```
 
 ## API Documentation
 
