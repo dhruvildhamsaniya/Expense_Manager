@@ -369,13 +369,7 @@ Once the app is running, visit:
 
 ### Multi-Currency
 
-**1. Set Base Currency**
-
-- During registration OR
-- In user settings (if implemented)
-- All dashboard totals show in base currency
-
-**2. Add Expense in Different Currency**
+**Add Expense in Different Currency**
 
 - Create expense
 - Select currency (USD, EUR, GBP, INR, etc.)
